@@ -49,16 +49,32 @@ services:
       # and loses operator config on every redeploy.
       OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
 
-      # --- Auth: trust the identity header from oauth2-proxy ---
-      # Requests without the header are rejected with 401, so the
-      # forward-auth middleware below is load-bearing, not decorative.
-      OMNIGENT_AUTH_ENABLED: "1"
-      OMNIGENT_AUTH_PROVIDER: header
-      # Must be a header name listed in the forward-auth middleware's
-      # authResponseHeaders — Traefik only overwrites those, and anything
-      # else could be spoofed by the client. oauth2-proxy-compose
-      # publishes X-Forwarded-User,X-Forwarded-Email.
-      OMNIGENT_AUTH_HEADER: ${OMNIGENT_AUTH_HEADER:-X-Forwarded-Email}
+      # --- Auth ---
+      # Default is oidc: omnigent runs its own login flow, which is what
+      # exposes /auth/cli-login — the endpoint `omnigent login` needs to
+      # register an external runner. header mode does not have it (404).
+      # Everything below comes from the Portainer stack env.
+      OMNIGENT_AUTH_ENABLED: "${OMNIGENT_AUTH_ENABLED:-1}"
+      OMNIGENT_AUTH_PROVIDER: "${OMNIGENT_AUTH_PROVIDER:-oidc}"
+
+      # oidc mode. The redirect URI is NOT configurable — the server
+      # derives it as https://${OMNIGENT_DOMAIN}/auth/callback, so that
+      # is what the IdP client must whitelist.
+      OMNIGENT_OIDC_ISSUER: "${OMNIGENT_OIDC_ISSUER:-}"
+      OMNIGENT_OIDC_CLIENT_ID: "${OMNIGENT_OIDC_CLIENT_ID:-}"
+      OMNIGENT_OIDC_CLIENT_SECRET: "${OMNIGENT_OIDC_CLIENT_SECRET:-}"
+      OMNIGENT_OIDC_COOKIE_SECRET: "${OMNIGENT_OIDC_COOKIE_SECRET:-}"
+      OMNIGENT_OIDC_SCOPES: "${OMNIGENT_OIDC_SCOPES:-}"
+      OMNIGENT_OIDC_ALLOWED_DOMAINS: "${OMNIGENT_OIDC_ALLOWED_DOMAINS:-}"
+      OMNIGENT_OIDC_SESSION_TTL_HOURS: "${OMNIGENT_OIDC_SESSION_TTL_HOURS:-8}"
+      OMNIGENT_OIDC_ALLOW_INVITES: "${OMNIGENT_OIDC_ALLOW_INVITES:-}"
+
+      # header mode only (OMNIGENT_AUTH_PROVIDER=header). Must name a
+      # header the forward-auth middleware lists in authResponseHeaders —
+      # Traefik only del+sets those, and any other name is client-
+      # spoofable. oauth2-proxy with SET_XAUTHREQUEST=true emits
+      # X-Auth-Request-Email, not X-Forwarded-Email.
+      OMNIGENT_AUTH_HEADER: "${OMNIGENT_AUTH_HEADER:-}"
 
       OMNIGENT_DOMAIN: ${OMNIGENT_HOST}
       OMNIGENT_CONFIG: ${OMNIGENT_CONFIG:-}
@@ -74,7 +90,10 @@ services:
       - "traefik.http.routers.omnigent.entrypoints=websecure"
       - "traefik.http.routers.omnigent.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
       - "traefik.http.services.omnigent.loadbalancer.server.port=8000"
-      - "traefik.http.routers.omnigent.middlewares=auth-errors@docker,forward-auth@docker"
+      # Empty by default: in oidc mode omnigent authenticates itself, and
+      # forward-auth in front of it would 401 the cookieless CLI/runner.
+      # Set to "auth-errors@docker,forward-auth@docker" only for header mode.
+      - "traefik.http.routers.omnigent.middlewares=${OMNIGENT_MIDDLEWARES:-}"
 
 networks:
   internal:

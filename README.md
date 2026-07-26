@@ -51,34 +51,48 @@ Optional (defaults in parentheses): `POSTGRES_USER`/`POSTGRES_DB`
 (`myresolver`), `OMNIGENT_CONFIG` (unset), plus the container/volume/network
 name overrides. Full list in [`.env.example`](.env.example).
 
-## Auth: header mode
+## Auth: OIDC (default)
 
-`OMNIGENT_AUTH_PROVIDER=header` — omnigent reads the authenticated identity
-from `X-Forwarded-Email` and rejects requests without it (401). The Traefik
-labels attach `auth-errors@docker,forward-auth@docker`, so oauth2-proxy is
-what actually authenticates.
+`OMNIGENT_AUTH_PROVIDER=oidc` — omnigent runs its own login flow against your
+IdP. No forward-auth middleware: `OMNIGENT_MIDDLEWARES` is empty by default,
+so Traefik passes requests straight through and omnigent authenticates them.
 
-**Security:** the header name must be one the forward-auth middleware lists in
-`authResponseHeaders` — Traefik deletes and re-sets exactly those from the
-auth response, which is what stops a client from spoofing an identity.
-`oauth2-proxy-compose` publishes `X-Forwarded-User,X-Forwarded-Email`, so the
-default is safe. Point `OMNIGENT_AUTH_HEADER` at anything *not* in that list
-and the server will trust whatever the client sends.
+That is deliberate, not an oversight. Omnigent's server doesn't execute
+agents — runners do, and they register from outside via `omnigent login <url>`
+→ `omnigent host <url>`. That flow hits `/auth/cli-login`, which **only exists
+in oidc mode**, and it arrives with no browser cookie, so forward-auth in
+front of it would 401 every attempt.
 
-### Known limitation: external runners
+Set up in your IdP a client with redirect URI exactly:
 
-Omnigent's server does not execute agents — runners do, and they register from
-outside (`omni login <url>` / `omni host <url>`). Those requests come from a
-CLI with no oauth2-proxy cookie, so forward-auth will 401 them. The browser UI
-works fine; hosting a laptop runner through this hostname will not, until
-either:
+```
+https://<OMNIGENT_HOST>/auth/callback
+```
 
-- a runner-only Traefik router is added on the registration path **without**
-  the forward-auth middleware (needs upstream's path list), or
-- the runner reaches the container directly over the docker network / a
-  Tailscale address, or
-- auth is switched to native OIDC against pocket-id (drops forward-auth
-  entirely, keeps CLI login working).
+The server derives that from `OMNIGENT_HOST`; there is no
+`OMNIGENT_OIDC_REDIRECT_URI` knob. Then set `OMNIGENT_OIDC_ISSUER`,
+`_CLIENT_ID`, `_CLIENT_SECRET` and `_COOKIE_SECRET` (`openssl rand -hex 32`)
+in the Portainer stack env.
+
+### Alternative: header mode behind oauth2-proxy
+
+Works for the browser UI only — no CLI, no external runners. Needs three
+things to line up, and getting any one wrong yields a silent 401 on every
+`/v1/*` call while the UI shell still loads:
+
+```
+OMNIGENT_AUTH_PROVIDER=header
+OMNIGENT_MIDDLEWARES=auth-errors@docker,forward-auth@docker
+OMNIGENT_AUTH_HEADER=<a name in the middleware's authResponseHeaders>
+```
+
+**Security:** Traefik del+sets *only* the headers named in the middleware's
+`authResponseHeaders`, and that is what blocks a client from spoofing an
+identity. Point `OMNIGENT_AUTH_HEADER` at a name outside that list and the
+server trusts whatever the client sends. Note oauth2-proxy with
+`SET_XAUTHREQUEST=true` emits `X-Auth-Request-Email`, *not*
+`X-Forwarded-Email` — if the middleware only forwards the latter, no identity
+reaches omnigent at all.
 
 ## Local test
 

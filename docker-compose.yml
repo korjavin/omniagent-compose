@@ -68,6 +68,11 @@ services:
       OMNIGENT_OIDC_ALLOWED_DOMAINS: "${OMNIGENT_OIDC_ALLOWED_DOMAINS:-}"
       OMNIGENT_OIDC_SESSION_TTL_HOURS: "${OMNIGENT_OIDC_SESSION_TTL_HOURS:-8}"
       OMNIGENT_OIDC_ALLOW_INVITES: "${OMNIGENT_OIDC_ALLOW_INVITES:-}"
+      # Escape hatch for IdPs that cannot assert email_verified. Leave
+      # empty: pocket-id emits the claim from a per-user flag, so the fix
+      # for "email present but email_verified is not true" is to verify
+      # the user in the IdP, not to stop checking here.
+      OMNIGENT_OIDC_SKIP_EMAIL_VERIFICATION: "${OMNIGENT_OIDC_SKIP_EMAIL_VERIFICATION:-}"
 
       # header mode only (OMNIGENT_AUTH_PROVIDER=header). Must name a
       # header the forward-auth middleware lists in authResponseHeaders —

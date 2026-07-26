@@ -1,0 +1,90 @@
+# Omnigent server + Postgres, behind Traefik + oauth2-proxy forward-auth.
+#
+# Adapted from upstream deploy/docker/docker-compose.yaml
+# (github.com/omnigent-ai/omnigent). Differences from upstream:
+#   - image comes from our GHCR vendor mirror, pinned to a digest tag on
+#     the `deploy` branch (see .github/workflows/vendor-images.yml)
+#   - no published ports; Traefik reaches omnigent over traefik_default
+#   - no Caddy overlay; Traefik terminates TLS
+#   - auth is header mode — identity comes from oauth2-proxy's
+#     X-Forwarded-Email (see README security note)
+#
+# The `:latest` tag below is a placeholder. The deploy branch rewrites it
+# to the vendored digest tag; Portainer watches `deploy`, not `master`.
+
+services:
+  omnigent-db:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    container_name: ${DB_CONTAINER_NAME:-omnigent-db}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-omnigent}
+      POSTGRES_USER: ${POSTGRES_USER:-omnigent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the Portainer stack env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-omnigent} -d ${POSTGRES_DB:-omnigent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  omnigent:
+    image: ghcr.io/korjavin/omnigent-server-vendor:latest
+    container_name: ${OMNIGENT_CONTAINER_NAME:-omnigent}
+    restart: unless-stopped
+    depends_on:
+      omnigent-db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-omnigent}:${POSTGRES_PASSWORD}@omnigent-db:5432/${POSTGRES_DB:-omnigent}
+      HOST: 0.0.0.0
+      PORT: "8000"
+      ARTIFACT_DIR: /data/artifacts
+      # Anchors the server's data dir on the persistent volume: admin
+      # roster (/data/admins), allowed-domains file, artifacts. Without
+      # it the server falls back to /root/.omnigent inside the container
+      # and loses operator config on every redeploy.
+      OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
+
+      # --- Auth: trust the identity header from oauth2-proxy ---
+      # Requests without the header are rejected with 401, so the
+      # forward-auth middleware below is load-bearing, not decorative.
+      OMNIGENT_AUTH_ENABLED: "1"
+      OMNIGENT_AUTH_PROVIDER: header
+      # Must be a header name listed in the forward-auth middleware's
+      # authResponseHeaders — Traefik only overwrites those, and anything
+      # else could be spoofed by the client. oauth2-proxy-compose
+      # publishes X-Forwarded-User,X-Forwarded-Email.
+      OMNIGENT_AUTH_HEADER: ${OMNIGENT_AUTH_HEADER:-X-Forwarded-Email}
+
+      OMNIGENT_DOMAIN: ${OMNIGENT_HOST}
+      OMNIGENT_CONFIG: ${OMNIGENT_CONFIG:-}
+    volumes:
+      - artifact-data:/data
+    networks:
+      - internal
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK_NAME:-traefik_default}"
+      - "traefik.http.routers.omnigent.rule=Host(`${OMNIGENT_HOST}`)"
+      - "traefik.http.routers.omnigent.entrypoints=websecure"
+      - "traefik.http.routers.omnigent.tls.certresolver=${TRAEFIK_CERTRESOLVER:-myresolver}"
+      - "traefik.http.services.omnigent.loadbalancer.server.port=8000"
+      - "traefik.http.routers.omnigent.middlewares=auth-errors@docker,forward-auth@docker"
+
+networks:
+  internal:
+    name: ${INTERNAL_NETWORK_NAME:-omnigent_internal}
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK_NAME:-traefik_default}
+
+volumes:
+  db-data:
+    name: ${DB_VOLUME_NAME:-omnigent_db-data}
+  artifact-data:
+    name: ${ARTIFACT_VOLUME_NAME:-omnigent_artifact-data}

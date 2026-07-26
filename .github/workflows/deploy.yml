@@ -1,0 +1,48 @@
+name: Deploy Omnigent Stack
+
+# Handles every master push EXCEPT those that touched the vendor workflow —
+# those re-vendor and pin the tag themselves. Everything else (compose
+# tweaks, env docs) re-pins the deploy branch to master HEAD with the tag
+# already recorded in image-tags.env.
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '.github/workflows/vendor-images.yml'
+      - '**.md'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-branch
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild deploy branch
+        run: bash .github/scripts/build-deploy-branch.sh
+
+      - name: Check Portainer webhook secret
+        id: webhook
+        env:
+          HOOK: ${{ secrets.PORTAINER_REDEPLOY_HOOK }}
+        run: |
+          if [ -n "$HOOK" ]; then echo "set=true" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Trigger Portainer Redeploy Webhook
+        if: steps.webhook.outputs.set == 'true'
+        uses: distributhor/workflow-webhook@2381f0e9c7b6bf061fb1405bd0804b8706116369 # v3.0.8
+        with:
+          webhook_url: ${{ secrets.PORTAINER_REDEPLOY_HOOK }}
+          webhook_secret: "trigger"

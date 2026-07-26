@@ -72,7 +72,7 @@ services:
       - "traefik.docker.network=${TRAEFIK_NETWORK_NAME:-traefik_default}"
       - "traefik.http.routers.omnigent.rule=Host(`${OMNIGENT_HOST}`)"
       - "traefik.http.routers.omnigent.entrypoints=websecure"
-      - "traefik.http.routers.omnigent.tls.certresolver=${TRAEFIK_CERTRESOLVER:-myresolver}"
+      - "traefik.http.routers.omnigent.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
       - "traefik.http.services.omnigent.loadbalancer.server.port=8000"
       - "traefik.http.routers.omnigent.middlewares=auth-errors@docker,forward-auth@docker"
 

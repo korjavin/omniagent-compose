@@ -13,7 +13,7 @@ name: Vendor Omnigent Image to GHCR
 
 on:
   schedule:
-    - cron: '0 4 * * 1'  # Weekly on Monday at 04:00 UTC
+    - cron: '0 3 * * *'  # Daily at 03:00 UTC (nightly)
   push:
     branches:
       - master
@@ -27,7 +27,7 @@ on:
         default: ''
 
 env:
-  UPSTREAM_TAG: v0.6.0
+  UPSTREAM_TAG: latest
 
 jobs:
   vendor:

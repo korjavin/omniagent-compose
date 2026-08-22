@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf 'ORCHESTRATOR MODE — this session is the delivery supervisor. Follow the skill below for every request.\\n\\n'; cat \"${CLAUDE_PLUGIN_ROOT}/skills/orchestrate/SKILL.md\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,18 @@
+spec_version: 1
+name: orchestrator
+description: >-
+  Native Claude Code (Fable) that starts every session with the orchestrate
+  skill already loaded — the owner's delivery supervisor: plans via an
+  architect subagent, schedules developer agents over beads, verifies PRs,
+  merges when CI is green.
+
+executor:
+  type: omnigent
+  # Applied to the native TUI launch; requires Fable to be enabled for the
+  # workspace, otherwise Claude Code keeps its configured default model.
+  model: fable
+  config:
+    harness: claude-native
+    # The orchestrator runs unattended by design (the skill assumes the
+    # owner walked away); auto-approve instead of stalling on ApprovalCards.
+    permission_mode: auto

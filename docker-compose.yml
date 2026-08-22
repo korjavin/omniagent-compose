@@ -48,6 +48,13 @@ services:
       # it the server falls back to /root/.omnigent inside the container
       # and loses operator config on every redeploy.
       OMNIGENT_ADMIN_CREDENTIALS_PATH: /data/admin-credentials
+      # Extra built-in agents seeded at startup (show up in the web UI's
+      # new-session picker like polly/debby). The bundle lives on the
+      # persistent volume; agents/ in this repo is the source of truth —
+      # sync it with:
+      #   sudo cp -rL agents/orchestrator \
+      #     /var/lib/docker/volumes/omnigent_artifact-data/_data/agents/
+      OMNIGENT_BUILTIN_AGENT_DIRS: /data/agents/orchestrator
 
       # --- Auth ---
       # Default is oidc: omnigent runs its own login flow, which is what

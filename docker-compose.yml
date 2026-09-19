@@ -32,7 +32,7 @@ services:
       - internal
 
   omnigent:
-    image: ghcr.io/korjavin/omnigent-server-vendor:latest
+    image: ghcr.io/korjavin/omnigent-server-vendor:d-9a964b9eb9c6
     container_name: ${OMNIGENT_CONTAINER_NAME:-omnigent}
     restart: unless-stopped
     depends_on:
